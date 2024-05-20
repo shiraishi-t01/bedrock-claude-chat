@@ -25,7 +25,7 @@ import { CronScheduleProps, createCronSchedule } from "./utils/cron-schedule";
 
 export interface BedrockChatStackProps extends StackProps {
   readonly bedrockRegion: string;
-  readonly webAclId: string;
+  // readonly webAclId: string;
   readonly identityProviders: TIdentityProvider[];
   readonly userPoolDomainPrefix: string;
   readonly publishedApiAllowedIpV4AddressRanges: string[];
@@ -44,8 +44,43 @@ export class BedrockChatStack extends cdk.Stack {
       ...props,
     });
     const cronSchedule = createCronSchedule(props.rdsSchedules);
+    
+    // NATインスタンスを作成
+    const natInstance = ec2.NatProvider.instanceV2({
+      instanceType: ec2.InstanceType.of(
+        ec2.InstanceClass.T4G,
+        ec2.InstanceSize.NANO
+      ),
+      machineImage: ec2.MachineImage.latestAmazonLinux2023({
+        cpuType: ec2.AmazonLinuxCpuType.ARM_64,
+      }),
+      defaultAllowedTraffic: ec2.NatTrafficDirection.OUTBOUND_ONLY,
+    });
 
-    const vpc = new ec2.Vpc(this, "VPC", {});
+    const vpc = new ec2.Vpc(this, "VPC", {
+      natGateways: 1,
+      natGatewayProvider: natInstance,
+      subnetConfiguration: [
+        {
+          cidrMask: 24,
+          name: "Public",
+          subnetType: ec2.SubnetType.PUBLIC,
+          mapPublicIpOnLaunch: true,
+        },
+        {
+          cidrMask: 24,
+          name: "Private",
+          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+        },
+      ]
+    });
+    
+        // NATインスタンスはVPC内からのみアクセス許可
+    natInstance.securityGroup.addIngressRule(
+      ec2.Peer.ipv4(vpc.vpcCidrBlock),
+      ec2.Port.allTraffic()
+    );
+
     const vectorStore = new VectorStore(this, "VectorStore", {
       vpc: vpc,
       rdsSchedule: cronSchedule,
@@ -95,7 +130,7 @@ export class BedrockChatStack extends cdk.Stack {
 
     const frontend = new Frontend(this, "Frontend", {
       accessLogBucket,
-      webAclId: props.webAclId,
+      // webAclId: props.webAclId,
       enableMistral: props.enableMistral,
     });
 
@@ -183,14 +218,14 @@ export class BedrockChatStack extends cdk.Stack {
     vectorStore.allowFrom(websocket.handler);
 
     // WebAcl for published API
-    const webAclForPublishedApi = new WebAclForPublishedApi(
-      this,
-      "WebAclForPublishedApi",
-      {
-        allowedIpV4AddressRanges: props.publishedApiAllowedIpV4AddressRanges,
-        allowedIpV6AddressRanges: props.publishedApiAllowedIpV6AddressRanges,
-      }
-    );
+    // const webAclForPublishedApi = new WebAclForPublishedApi(
+    //   this,
+    //   "WebAclForPublishedApi",
+    //   {
+    //     allowedIpV4AddressRanges: props.publishedApiAllowedIpV4AddressRanges,
+    //     allowedIpV6AddressRanges: props.publishedApiAllowedIpV6AddressRanges,
+    //   }
+    // );
 
     new CfnOutput(this, "DocumentBucketName", {
       value: documentBucket.bucketName,
@@ -200,10 +235,10 @@ export class BedrockChatStack extends cdk.Stack {
     });
 
     // Outputs for API publication
-    new CfnOutput(this, "PublishedApiWebAclArn", {
-      value: webAclForPublishedApi.webAclArn,
-      exportName: "PublishedApiWebAclArn",
-    });
+    // new CfnOutput(this, "PublishedApiWebAclArn", {
+    //   value: webAclForPublishedApi.webAclArn,
+    //   exportName: "PublishedApiWebAclArn",
+    // });
     new CfnOutput(this, "VpcId", {
       value: vpc.vpcId,
       exportName: "BedrockClaudeChatVpcId",

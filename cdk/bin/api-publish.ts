@@ -118,7 +118,7 @@ const publishedApi = new ApiPublishmentStack(
     dbConfigHostname: dbConfigHostname,
     dbConfigPort: dbConfigPort,
     dbSecurityGroupId: dbSecurityGroupId,
-    webAclArn: webAclArn,
+    // webAclArn: webAclArn,
     largeMessageBucketName: largeMessageBucketName,
     usagePlan: {
       throttle:

@@ -29,7 +29,7 @@ interface ApiPublishmentStackProps extends StackProps {
   readonly dbSecurityGroupId: string;
   readonly conversationTableName: string;
   readonly tableAccessRoleArn: string;
-  readonly webAclArn: string;
+  // readonly webAclArn: string;
   readonly usagePlan: apigateway.UsagePlanProps;
   readonly deploymentStage?: string;
   readonly largeMessageBucketName: string;
@@ -210,15 +210,15 @@ export class ApiPublishmentStack extends Stack {
     usagePlan.addApiKey(apiKey);
     usagePlan.addApiStage({ stage: api.deploymentStage });
 
-    const association = new wafv2.CfnWebACLAssociation(
-      this,
-      "WebAclAssociation",
-      {
-        resourceArn: `arn:aws:apigateway:${this.region}::/restapis/${api.restApiId}/stages/${api.deploymentStage.stageName}`,
-        webAclArn: props.webAclArn,
-      }
-    );
-    association.addDependency(api.node.defaultChild as cdk.CfnResource);
+    // const association = new wafv2.CfnWebACLAssociation(
+    //   this,
+    //   "WebAclAssociation",
+    //   {
+    //     resourceArn: `arn:aws:apigateway:${this.region}::/restapis/${api.restApiId}/stages/${api.deploymentStage.stageName}`,
+    //     webAclArn: props.webAclArn,
+    //   }
+    // );
+    // association.addDependency(api.node.defaultChild as cdk.CfnResource);
 
     this.chatQueue = chatQueue;
 
