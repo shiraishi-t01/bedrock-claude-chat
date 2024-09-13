@@ -40,7 +40,7 @@ export interface BedrockChatStackProps extends StackProps {
   readonly embeddingContainerVcpu: number;
   readonly embeddingContainerMemory: number;
   readonly selfSignUpEnabled: boolean;
-  readonly enableIpV6: boolean;
+  // readonly enableIpV6: boolean;
   readonly natgatewayCount: number;
 }
 
@@ -52,7 +52,7 @@ export class BedrockChatStack extends cdk.Stack {
     });
     const cronSchedule = createCronSchedule(props.rdsSchedules);
     
-    // NATƒCƒ“ƒXƒ^ƒ“ƒX‚ðì¬
+    // NATã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹ã‚’ä½œæˆ
     const natInstance = ec2.NatProvider.instanceV2({
       instanceType: ec2.InstanceType.of(
         ec2.InstanceClass.T4G,
@@ -82,7 +82,7 @@ export class BedrockChatStack extends cdk.Stack {
       ]
     });
     
-        // NATƒCƒ“ƒXƒ^ƒ“ƒX‚ÍVPC“à‚©‚ç‚Ì‚ÝƒAƒNƒZƒX‹–‰Â
+    // NATã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹ã¯VPCå†…ã‹ã‚‰ã®ã¿ã‚¢ã‚¯ã‚»ã‚¹è¨±å¯
     natInstance.securityGroup.addIngressRule(
       ec2.Peer.ipv4(vpc.vpcCidrBlock),
       ec2.Port.allTraffic()
@@ -176,7 +176,7 @@ export class BedrockChatStack extends cdk.Stack {
       // webAclId: props.webAclId,
       enableMistral: props.enableMistral,
       enableKB: props.enableKB,
-      enableIpV6: props.enableIpV6,
+      // enableIpV6: props.enableIpV6,
     });
 
     const auth = new Auth(this, "Auth", {
