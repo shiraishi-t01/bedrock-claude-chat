@@ -51,7 +51,7 @@
 - 下記のコマンドでデプロイを実行します。デプロイするバージョンを指定したい場合や、セキュリティポリシーを適用する必要がある場合は、[オプションのパラメータ](#オプションのパラメータ)から該当するものを指定してください。
 
 ```sh
-git clone https://github.com/aws-samples/bedrock-claude-chat.git
+git clone https://github.com/shiraishi-t01/bedrock-claude-chat.git
 cd bedrock-claude-chat
 chmod +x bin.sh
 ./bin.sh --version "develop"
