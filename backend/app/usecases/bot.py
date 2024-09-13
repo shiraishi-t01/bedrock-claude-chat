@@ -1,6 +1,10 @@
 import logging
 import os
 
+from app.agents.utils import get_available_tools, get_tool_by_name
+from app.config import DEFAULT_EMBEDDING_CONFIG
+from app.config import DEFAULT_GENERATION_CONFIG as DEFAULT_CLAUDE_GENERATION_CONFIG
+from app.config import DEFAULT_MISTRAL_GENERATION_CONFIG, DEFAULT_SEARCH_CONFIG
 from app.repositories.common import (
     RecordNotFoundError,
     _get_table_client,
@@ -22,26 +26,34 @@ from app.repositories.custom_bot import (
     update_bot_pin_status,
 )
 from app.repositories.models.custom_bot import (
+    AgentModel,
+    AgentToolModel,
     BotAliasModel,
     BotMeta,
     BotModel,
+    ConversationQuickStarterModel,
     EmbeddingParamsModel,
-    KnowledgeModel,
     GenerationParamsModel,
+    KnowledgeModel,
     SearchParamsModel,
 )
+from app.repositories.models.custom_bot_kb import BedrockKnowledgeBaseModel
 from app.routes.schemas.bot import (
+    Agent,
+    AgentTool,
     BotInput,
     BotModifyInput,
     BotModifyOutput,
     BotOutput,
     BotSummaryOutput,
+    ConversationQuickStarter,
     EmbeddingParams,
     GenerationParams,
-    SearchParams,
     Knowledge,
+    SearchParams,
     type_sync_status,
 )
+from app.routes.schemas.bot_kb import BedrockKnowledgeBaseOutput
 from app.utils import (
     compose_upload_document_s3_path,
     compose_upload_temp_s3_path,
@@ -51,13 +63,6 @@ from app.utils import (
     generate_presigned_url,
     get_current_time,
     move_file_in_s3,
-)
-
-from app.config import (
-    DEFAULT_EMBEDDING_CONFIG,
-    DEFAULT_GENERATION_CONFIG as DEFAULT_CLAUDE_GENERATION_CONFIG,
-    DEFAULT_MISTRAL_GENERATION_CONFIG,
-    DEFAULT_SEARCH_CONFIG,
 )
 from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
@@ -99,15 +104,18 @@ def create_new_bot(user_id: str, bot_input: BotInput) -> BotOutput:
         len(bot_input.knowledge.source_urls) > 0
         or len(bot_input.knowledge.sitemap_urls) > 0
         or len(bot_input.knowledge.filenames) > 0
+        or len(bot_input.knowledge.s3_urls) > 0
     )
     sync_status: type_sync_status = "QUEUED" if has_knowledge else "SUCCEEDED"
 
     source_urls = []
     sitemap_urls = []
     filenames = []
+    s3_urls = []
     if bot_input.knowledge:
         source_urls = bot_input.knowledge.source_urls
         sitemap_urls = bot_input.knowledge.sitemap_urls
+        s3_urls = bot_input.knowledge.s3_urls
 
         # Commit changes to S3
         _update_s3_documents_by_diff(
@@ -149,6 +157,19 @@ def create_new_bot(user_id: str, bot_input: BotInput) -> BotOutput:
         else DEFAULT_SEARCH_CONFIG
     )
 
+    agent = (
+        AgentModel(
+            tools=[
+                AgentToolModel(name=t.name, description=t.description)
+                for t in [
+                    get_tool_by_name(tool_name) for tool_name in bot_input.agent.tools
+                ]
+            ]
+        )
+        if bot_input.agent
+        else AgentModel(tools=[])
+    )
+
     store_bot(
         user_id,
         BotModel(
@@ -166,10 +187,14 @@ def create_new_bot(user_id: str, bot_input: BotInput) -> BotOutput:
                 chunk_overlap=chunk_overlap,
                 enable_partition_pdf=enable_partition_pdf,
             ),
-            generation_params=GenerationParamsModel(**generation_params),
+            generation_params=GenerationParamsModel(**generation_params),  # type: ignore
             search_params=SearchParamsModel(**search_params),
+            agent=agent,
             knowledge=KnowledgeModel(
-                source_urls=source_urls, sitemap_urls=sitemap_urls, filenames=filenames
+                source_urls=source_urls,
+                sitemap_urls=sitemap_urls,
+                filenames=filenames,
+                s3_urls=s3_urls,
             ),
             sync_status=sync_status,
             sync_status_reason="",
@@ -177,6 +202,25 @@ def create_new_bot(user_id: str, bot_input: BotInput) -> BotOutput:
             published_api_stack_name=None,
             published_api_datetime=None,
             published_api_codebuild_id=None,
+            display_retrieved_chunks=bot_input.display_retrieved_chunks,
+            conversation_quick_starters=(
+                []
+                if bot_input.conversation_quick_starters is None
+                else [
+                    ConversationQuickStarterModel(
+                        title=starter.title,
+                        example=starter.example,
+                    )
+                    for starter in bot_input.conversation_quick_starters
+                ]
+            ),
+            bedrock_knowledge_base=(
+                BedrockKnowledgeBaseModel(
+                    **(bot_input.bedrock_knowledge_base.model_dump())
+                )
+                if bot_input.bedrock_knowledge_base
+                else None
+            ),
         ),
     )
     return BotOutput(
@@ -196,12 +240,40 @@ def create_new_bot(user_id: str, bot_input: BotInput) -> BotOutput:
         ),
         generation_params=GenerationParams(**generation_params),
         search_params=SearchParams(**search_params),
+        agent=Agent(
+            tools=[
+                AgentTool(name=tool.name, description=tool.description)
+                for tool in agent.tools
+            ]
+        ),
         knowledge=Knowledge(
-            source_urls=source_urls, sitemap_urls=sitemap_urls, filenames=filenames
+            source_urls=source_urls,
+            sitemap_urls=sitemap_urls,
+            filenames=filenames,
+            s3_urls=s3_urls,
         ),
         sync_status=sync_status,
         sync_status_reason="",
         sync_last_exec_id="",
+        display_retrieved_chunks=bot_input.display_retrieved_chunks,
+        conversation_quick_starters=(
+            []
+            if bot_input.conversation_quick_starters is None
+            else [
+                ConversationQuickStarter(
+                    title=starter.title,
+                    example=starter.example,
+                )
+                for starter in bot_input.conversation_quick_starters
+            ]
+        ),
+        bedrock_knowledge_base=(
+            BedrockKnowledgeBaseOutput(
+                **(bot_input.bedrock_knowledge_base.model_dump())
+            )
+            if bot_input.bedrock_knowledge_base
+            else None
+        ),
     )
 
 
@@ -212,11 +284,13 @@ def modify_owned_bot(
     source_urls = []
     sitemap_urls = []
     filenames = []
+    s3_urls = []
     sync_status: type_sync_status = "QUEUED"
 
     if modify_input.knowledge:
         source_urls = modify_input.knowledge.source_urls
         sitemap_urls = modify_input.knowledge.sitemap_urls
+        s3_urls = modify_input.knowledge.s3_urls
 
         # Commit changes to S3
         _update_s3_documents_by_diff(
@@ -265,6 +339,20 @@ def modify_owned_bot(
         else DEFAULT_SEARCH_CONFIG
     )
 
+    agent = (
+        AgentModel(
+            tools=[
+                AgentToolModel(name=t.name, description=t.description)
+                for t in [
+                    get_tool_by_name(tool_name)
+                    for tool_name in modify_input.agent.tools
+                ]
+            ]
+        )
+        if modify_input.agent
+        else AgentModel(tools=[])
+    )
+
     # if knowledge and embedding_params are not updated, skip embeding process.
     # 'sync_status = "QUEUED"' will execute embeding process and update dynamodb record.
     # 'sync_status= "SUCCEEDED"' will update only dynamodb record.
@@ -284,13 +372,34 @@ def modify_owned_bot(
         ),
         generation_params=GenerationParamsModel(**generation_params),
         search_params=SearchParamsModel(**search_params),
+        agent=agent,
         knowledge=KnowledgeModel(
             source_urls=source_urls,
             sitemap_urls=sitemap_urls,
             filenames=filenames,
+            s3_urls=s3_urls,
         ),
         sync_status=sync_status,
         sync_status_reason="",
+        display_retrieved_chunks=modify_input.display_retrieved_chunks,
+        conversation_quick_starters=(
+            []
+            if modify_input.conversation_quick_starters is None
+            else [
+                ConversationQuickStarterModel(
+                    title=starter.title,
+                    example=starter.example,
+                )
+                for starter in modify_input.conversation_quick_starters
+            ]
+        ),
+        bedrock_knowledge_base=(
+            BedrockKnowledgeBaseModel(
+                **modify_input.bedrock_knowledge_base.model_dump()
+            )
+            if modify_input.bedrock_knowledge_base
+            else None
+        ),
     )
 
     return BotModifyOutput(
@@ -305,10 +414,35 @@ def modify_owned_bot(
         ),
         generation_params=GenerationParams(**generation_params),
         search_params=SearchParams(**search_params),
+        agent=Agent(
+            tools=[
+                AgentTool(name=tool.name, description=tool.description)
+                for tool in agent.tools
+            ]
+        ),
         knowledge=Knowledge(
             source_urls=source_urls,
             sitemap_urls=sitemap_urls,
             filenames=filenames,
+            s3_urls=s3_urls,
+        ),
+        conversation_quick_starters=(
+            []
+            if modify_input.conversation_quick_starters is None
+            else [
+                ConversationQuickStarter(
+                    title=starter.title,
+                    example=starter.example,
+                )
+                for starter in modify_input.conversation_quick_starters
+            ]
+        ),
+        bedrock_knowledge_base=(
+            BedrockKnowledgeBaseOutput(
+                **(modify_input.bedrock_knowledge_base.model_dump())
+            )
+            if modify_input.bedrock_knowledge_base
+            else None
         ),
     )
 
@@ -380,6 +514,7 @@ def fetch_all_bots_by_user_id(
                     description=bot.description,
                     is_public=True,
                     sync_status=bot.sync_status,
+                    has_bedrock_knowledge_base=bot.has_bedrock_knowledge_base(),
                 )
             except RecordNotFoundError:
                 # Original bot is removed
@@ -397,6 +532,7 @@ def fetch_all_bots_by_user_id(
                     description="This item is no longer available",
                     is_public=False,
                     sync_status="ORIGINAL_NOT_FOUND",
+                    has_bedrock_knowledge_base=False,
                 )
 
             if is_original_available and (
@@ -404,6 +540,11 @@ def fetch_all_bots_by_user_id(
                 or bot.description != item["Description"]
                 or bot.sync_status != item["SyncStatus"]
                 or bot.has_knowledge() != item["HasKnowledge"]
+                or bot.conversation_quick_starters
+                != [
+                    ConversationQuickStarter(**starter)
+                    for starter in item.get("ConversationQuickStarters", [])
+                ]
             ):
                 # Update alias to the latest original bot
                 store_alias(
@@ -419,6 +560,8 @@ def fetch_all_bots_by_user_id(
                         is_pinned=item["IsPinned"],
                         sync_status=bot.sync_status,
                         has_knowledge=bot.has_knowledge(),
+                        has_agent=bot.is_agent_enabled(),
+                        conversation_quick_starters=bot.conversation_quick_starters,
                     ),
                 )
 
@@ -437,6 +580,9 @@ def fetch_all_bots_by_user_id(
                     description=item["Description"],
                     is_public="PublicBotId" in item,
                     sync_status=item["SyncStatus"],
+                    has_bedrock_knowledge_base=(
+                        True if item.get("BedrockKnowledgeBase", None) else False
+                    ),
                 )
             )
 
@@ -454,9 +600,18 @@ def fetch_bot_summary(user_id: str, bot_id: str) -> BotSummaryOutput:
             last_used_time=bot.last_used_time,
             is_pinned=bot.is_pinned,
             is_public=True if bot.public_bot_id else False,
+            has_agent=bot.is_agent_enabled(),
             owned=True,
             sync_status=bot.sync_status,
             has_knowledge=bot.has_knowledge(),
+            conversation_quick_starters=[
+                ConversationQuickStarter(
+                    title=starter.title,
+                    example=starter.example,
+                )
+                for starter in bot.conversation_quick_starters
+            ],
+            owned_and_has_bedrock_knowledge_base=bot.has_bedrock_knowledge_base(),
         )
 
     except RecordNotFoundError:
@@ -472,9 +627,22 @@ def fetch_bot_summary(user_id: str, bot_id: str) -> BotSummaryOutput:
             last_used_time=alias.last_used_time,
             is_pinned=alias.is_pinned,
             is_public=True,
+            has_agent=alias.has_agent,
             owned=False,
             sync_status=alias.sync_status,
             has_knowledge=alias.has_knowledge,
+            conversation_quick_starters=(
+                []
+                if alias.conversation_quick_starters is None
+                else [
+                    ConversationQuickStarter(
+                        title=starter.title,
+                        example=starter.example,
+                    )
+                    for starter in alias.conversation_quick_starters
+                ]
+            ),
+            owned_and_has_bedrock_knowledge_base=False,
         )
     except RecordNotFoundError:
         pass
@@ -496,6 +664,14 @@ def fetch_bot_summary(user_id: str, bot_id: str) -> BotSummaryOutput:
                 is_pinned=False,
                 sync_status=bot.sync_status,
                 has_knowledge=bot.has_knowledge(),
+                has_agent=bot.is_agent_enabled(),
+                conversation_quick_starters=[
+                    ConversationQuickStarterModel(
+                        title=starter.title,
+                        example=starter.example,
+                    )
+                    for starter in bot.conversation_quick_starters
+                ],
             ),
         )
         return BotSummaryOutput(
@@ -506,9 +682,18 @@ def fetch_bot_summary(user_id: str, bot_id: str) -> BotSummaryOutput:
             last_used_time=bot.last_used_time,
             is_pinned=False,  # NOTE: Shared bot is not pinned by default.
             is_public=True,
+            has_agent=bot.is_agent_enabled(),
             owned=False,
             sync_status=bot.sync_status,
             has_knowledge=bot.has_knowledge(),
+            conversation_quick_starters=[
+                ConversationQuickStarter(
+                    title=starter.title,
+                    example=starter.example,
+                )
+                for starter in bot.conversation_quick_starters
+            ],
+            owned_and_has_bedrock_knowledge_base=False,
         )
     except RecordNotFoundError:
         raise RecordNotFoundError(
@@ -573,3 +758,8 @@ def remove_uploaded_file(user_id: str, bot_id: str, filename: str):
         DOCUMENT_BUCKET, compose_upload_temp_s3_path(user_id, bot_id, filename)
     )
     return
+
+
+def fetch_available_agent_tools():
+    """Fetch available tools for bot."""
+    return get_available_tools()

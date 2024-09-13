@@ -48,6 +48,8 @@ export const convertMessageMapToArray = (
         children: messageContent.children,
         sibling: [],
         feedback: messageContent.feedback,
+        usedChunks: messageContent.usedChunks,
+        thinkingLog: messageContent.thinkingLog,
       });
 
       key = messageContent.parent;
@@ -88,6 +90,8 @@ export const convertMessageMapToArray = (
         children: messageContent.children,
         sibling: [],
         feedback: messageContent.feedback,
+        usedChunks: messageContent.usedChunks,
+        thinkingLog: messageContent.thinkingLog,
       });
       key = messageContent.children[0];
     }

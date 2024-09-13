@@ -1,7 +1,9 @@
-import { Auth } from 'aws-amplify';
+import { fetchAuthSession } from 'aws-amplify/auth';
 import { PostMessageRequest } from '../@types/conversation';
 import { create } from 'zustand';
 import i18next from 'i18next';
+import { AgentEvent } from '../features/agent/xstates/agentThink';
+import { PostStreamingStatus } from '../constants';
 
 const WS_ENDPOINT: string = import.meta.env.VITE_APP_WS_ENDPOINT;
 const CHUNK_SIZE = 32 * 1024; //32KB
@@ -11,16 +13,17 @@ const usePostMessageStreaming = create<{
     input: PostMessageRequest;
     hasKnowledge?: boolean;
     dispatch: (completion: string) => void;
+    thinkingDispatch: (event: AgentEvent) => void;
   }) => Promise<string>;
 }>(() => {
   return {
-    post: async ({ input, dispatch, hasKnowledge }) => {
+    post: async ({ input, dispatch, hasKnowledge, thinkingDispatch }) => {
       if (hasKnowledge) {
         dispatch(i18next.t('bot.label.retrievingKnowledge'));
       } else {
         dispatch(i18next.t('app.chatWaitingSymbol'));
       }
-      const token = (await Auth.currentSession()).getIdToken().getJwtToken();
+      const token = (await fetchAuthSession()).tokens?.idToken?.toString();
       const payloadString = JSON.stringify({
         ...input,
         token,
@@ -41,7 +44,12 @@ const usePostMessageStreaming = create<{
         const ws = new WebSocket(WS_ENDPOINT);
 
         ws.onopen = () => {
-          ws.send('START');
+          ws.send(
+            JSON.stringify({
+              step: PostStreamingStatus.START,
+              token: token,
+            })
+          );
         };
 
         ws.onmessage = (message) => {
@@ -59,6 +67,7 @@ const usePostMessageStreaming = create<{
               chunkedPayloads.forEach((chunk, index) => {
                 ws.send(
                   JSON.stringify({
+                    step: PostStreamingStatus.BODY,
                     index,
                     part: chunk,
                   })
@@ -68,27 +77,74 @@ const usePostMessageStreaming = create<{
             } else if (message.data === 'Message part received.') {
               receivedCount++;
               if (receivedCount === chunkedPayloads.length) {
-                ws.send('END');
+                ws.send(
+                  JSON.stringify({
+                    step: PostStreamingStatus.END,
+                  })
+                );
               }
               return;
             }
 
             const data = JSON.parse(message.data);
 
-            if (data.completion || data.completion === '') {
-              if (completion.endsWith(i18next.t('app.chatWaitingSymbol'))) {
-                completion = completion.slice(0, -1);
-              }
+            if (data.status) {
+              switch (data.status) {
+                case PostStreamingStatus.FETCHING_KNOWLEDGE:
+                  dispatch(i18next.t('bot.label.retrievingKnowledge'));
+                  break;
+                case PostStreamingStatus.AGENT_THINKING:
+                  Object.entries(data.log).forEach(([toolUseId, toolInfo]) => {
+                    const typedToolInfo = toolInfo as {
+                      name: string;
+                      input: { [key: string]: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
+                    };
+                    thinkingDispatch({
+                      type: 'go-on',
+                      toolUseId: toolUseId,
+                      name: typedToolInfo.name,
+                      input: typedToolInfo.input,
+                    });
+                  });
+                  break;
+                case PostStreamingStatus.AGENT_TOOL_RESULT:
+                  thinkingDispatch({
+                    type: 'tool-result',
+                    toolUseId: data.result.toolUseId,
+                    status: data.result.status,
+                    content: data.result.content,
+                  });
+                  break;
+                case PostStreamingStatus.STREAMING:
+                  if (data.completion || data.completion === '') {
+                    if (
+                      completion.endsWith(i18next.t('app.chatWaitingSymbol'))
+                    ) {
+                      completion = completion.slice(0, -1);
+                    }
+                    completion +=
+                      data.completion + i18next.t('app.chatWaitingSymbol');
+                    dispatch(completion);
+                  }
+                  break;
+                case PostStreamingStatus.STREAMING_END:
+                  thinkingDispatch({
+                    type: 'goodbye',
+                  });
 
-              completion +=
-                data.completion +
-                (data.stop_reason ? '' : i18next.t('app.chatWaitingSymbol'));
-              dispatch(completion);
-              if (data.stop_reason) {
-                ws.close();
+                  if (completion.endsWith(i18next.t('app.chatWaitingSymbol'))) {
+                    completion = completion.slice(0, -1);
+                    dispatch(completion);
+                  }
+                  ws.close();
+                  break;
+                case PostStreamingStatus.ERROR:
+                  ws.close();
+                  console.error(data);
+                  throw new Error(i18next.t('error.predict.invalidResponse'));
+                default:
+                  dispatch(i18next.t('app.chatWaitingSymbol'));
               }
-            } else if (data.status) {
-              dispatch(i18next.t('app.chatWaitingSymbol'));
             } else {
               ws.close();
               console.error(data);

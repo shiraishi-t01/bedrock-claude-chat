@@ -15,12 +15,61 @@ const translation = {
       chatWaitingSymbol: '▍',
       adminConsoles: 'Admin Only',
     },
+    agent: {
+      label: 'Agent',
+      help: {
+        overview:
+          'By using the Agent functionality, your chatbot can automatically handle more complex tasks.',
+      },
+      hint: `The agent automatically determines which tools to use to answer the user's questions. Due to the time required for decision, the response time tends to be longer. Activating one or more tools enables the agent's functionality. Conversely, if no tools are selected, the agent's functionality is not utilized. When the agent's functionality is enabled, the use of "Knowledge" is also treated as one of the tools. This means that "Knowledge" may not be used in responses.`,
+      progress: {
+        label: 'Thinking...',
+      },
+      progressCard: {
+        toolInput: 'Input: ',
+        toolOutput: 'Output: ',
+        status: {
+          running: 'Running...',
+          success: 'Success',
+          error: 'Error',
+        },
+      },
+      tools: {
+        get_weather: {
+          name: 'Current Weather',
+          description: 'Retrieve the current weather forecast.',
+        },
+        sql_db_query: {
+          name: 'Database Query',
+          description:
+            'Execute a detailed and correct SQL query to retrieve results from the database.',
+        },
+        sql_db_schema: {
+          name: 'Database Schema',
+          description:
+            'Retrieve the schema and sample rows for a list of tables.',
+        },
+        sql_db_list_tables: {
+          name: 'List Database Tables',
+          description: 'List all tables available in the database.',
+        },
+        sql_db_query_checker: {
+          name: 'Query Checker',
+          description: 'Check if your SQL query is correct before execution.',
+        },
+        internet_search: {
+          name: 'Internet Search',
+          description: 'Search the internet for information.',
+        },
+      },
+    },
     bot: {
       label: {
         myBots: 'My Bots',
         recentlyUsedBots: 'Recently Used Shared Bots',
         knowledge: 'Knowledge',
         url: 'URL',
+        s3url: 'S3 Data Source',
         sitemap: 'Sitemap URL',
         file: 'File',
         loadingBot: 'Loading...',
@@ -47,6 +96,13 @@ const translation = {
           uploaded: 'Uploaded',
           error: 'ERROR',
         },
+        quickStarter: {
+          title: 'Conversation Quick Starter ',
+          exampleTitle: 'Title',
+          example: 'Conversation Example',
+        },
+        citeRetrievedContexts: 'Retrieved Context Citation',
+        unsupported: 'Unsupported, Read-only',
       },
       titleSubmenu: {
         edit: 'Edit',
@@ -62,9 +118,17 @@ const translation = {
           overview:
             'By providing external knowledge to the bot, it becomes able to handle data that it has not been pre-trained on.',
           url: 'The information from the specified URL will be used as Knowledge. If you set the URL of a YouTube video, the transcript of that video will be used as Knowledge.',
+          s3url:
+            'By entering the S3 URI, you can add S3 as a data source. You can add up to 4 sources. It only supports buckets that exist in the same account and the same region as the deployment destination.',
           sitemap:
             'By specifying the URL of the sitemap, the information obtained through automatically scraping websites within it will be used as Knowledge.',
           file: 'The uploaded files will be used as Knowledge.',
+          citeRetrievedContexts:
+            'Configure whether to display context retrieved to answer user queries as citation information.\nIf enabled, users can access the original source URLs or files.',
+        },
+        quickStarter: {
+          overview:
+            'When starting a conversation, provide examples. Examples illustrate how to use the bot.',
         },
       },
       alert: {
@@ -119,6 +183,11 @@ How would you categorize this email?`,
         title: 'Name',
         description: 'Description',
         instruction: 'Instructions',
+      },
+      explore: {
+        label: {
+          pageTitle: 'Bot Console',
+        },
       },
       apiSettings: {
         pageTitle: 'Shared Bot Publish API Settings',
@@ -354,6 +423,7 @@ How would you categorize this email?`,
       signOut: 'Sign out',
       close: 'Close',
       add: 'Add',
+      continue: 'Continue to generate',
     },
     input: {
       hint: {
@@ -377,7 +447,8 @@ How would you categorize this email?`,
         hint: 'You can specify the number of overlapping characters between adjacent chunks.',
       },
       enablePartitionPdf: {
-        label: 'Enable detailed PDF analysis. If enabled, the PDF will be analyzed in detail over time.',
+        label:
+          'Enable detailed PDF analysis. If enabled, the PDF will be analyzed in detail over time.',
         hint: 'It is effective when you want to improve search accuracy. Computation costs increase because computation takes more time.',
       },
       help: {
@@ -397,7 +468,8 @@ How would you categorize this email?`,
     },
     generationConfig: {
       title: 'Generation Config',
-      description: ' You can configure LLM inference parameters to control the response from the models.',
+      description:
+        ' You can configure LLM inference parameters to control the response from the models.',
       maxTokens: {
         label: 'Maximum generation length/maximum new tokens',
         hint: 'The maximum number of tokens allowed in the generated response',
@@ -420,27 +492,108 @@ How would you categorize this email?`,
       stopSequences: {
         label: 'End token/end sequence',
         hint: 'Specify sequences of characters that stop the model from generating further tokens. Use commas to separate multiple words',
-      }
+      },
     },
     searchSettings: {
       title: 'Search Settings',
-      description: 'You can configure search parameters to fetch relevant documents from vector store.',
+      description:
+        'You can configure search parameters to fetch relevant documents from vector store.',
       maxResults: {
         label: 'Max Results',
         hint: 'The maximum number of records fetched from vector store',
-      }
+      },
+      searchType: {
+        label: 'Search Type',
+        hybrid: {
+          label: 'Hybrid search',
+          hint: 'Combines relevancy scores from semantic and text search to provide greater accuracy.',
+        },
+        semantic: {
+          label: 'Semantic search',
+          hint: 'Uses vector embeddings to deliver relevant results.',
+        },
+      },
+    },
+    knowledgeBaseSettings: {
+      title: 'Knowledge Detail Settings',
+      description:
+        'Select the embedded model for configuring knowledge, and set the method for splitting documents added as knowledge. These settings cannot be changed after creating the bot.',
+      embeddingModel: {
+        label: 'Embeddings Model',
+        titan_v1: {
+          label: 'Titan Embeddings G1 - Text v1.2',
+        },
+        cohere_multilingual_v3: {
+          label: 'Embed Multilingual v3',
+        },
+      },
+      chunkingStrategy: {
+        label: 'Chunking Strategy',
+        default: {
+          label: 'Default chunking',
+          hint: "Automatically splits text into chunks of about 300 tokens in size, by default. If a document is less than or already 300 tokens, it's not split any futher.",
+        },
+        fixed_size: {
+          label: 'Fixed-size chunking',
+          hint: 'Splits text into your set approximate token size.',
+        },
+        none: {
+          label: 'No chunking',
+          hint: 'Documents will not be split.',
+        },
+      },
+      chunkingMaxTokens: {
+        label: 'Max Tokens',
+        hint: 'The maximum number of tokens per chunk',
+      },
+      chunkingOverlapPercentage: {
+        label: 'Overlap Percentage between Chunks',
+        hint: 'Parent chunk overlap depends on the child token size and child percentage overlap you specify.',
+      },
+      opensearchAnalyzer: {
+        label: 'Analyzer (Tokenization, Normalization)',
+        hint: 'You can specify the analyzer to tokenize and normalize the documents registered as knowledge. Selecting an appropriate analyzer will improve search accuracy. Please choose the optimal analyzer that matches the language of your knowledge.',
+        icu: {
+          label: 'ICU analyzer',
+          hint: 'For tokenization, {{tokenizer}} is used, and for normalization, {{normalizer}} is used.',
+        },
+        kuromoji: {
+          label: 'Japanese (kuromoji) analyzer',
+          hint: 'For tokenization, {{tokenizer}} is used, and for normalization, {{normalizer}} is used.',
+        },
+        none: {
+          label: 'System default analyzer',
+          hint: 'The default analyzer defined by the system (OpenSearch) will be used.',
+        },
+        tokenizer: 'Tokenizer:',
+        normalizer: 'Normalizer:',
+        token_filter: 'Token Filter:',
+        not_specified: 'Not specified',
+      },
     },
     error: {
       answerResponse: 'An error occurred while responding.',
       notFoundConversation:
         'Since the specified chat does not exist, a new chat screen is displayed.',
       notFoundPage: 'The page you are looking for is not found.',
+      unexpectedError: {
+        title: 'An unexpected error has occurred.',
+        restore: 'Go to TOP page',
+      },
       predict: {
         general: 'An error occurred while predicting.',
         invalidResponse:
           'Unexpected response received. The response format does not match the expected format.',
       },
       notSupportedImage: 'The selected model does not support images.',
+      unsupportedFileFormat: 'The selected file format is not supported.',
+      totalFileSizeToSendExceeded:
+        'The total file size must be no more than {{maxSize}}.',
+      attachment: {
+        fileSizeExceeded:
+          'Each document size must be no more than {{maxSize}}.',
+        fileCountExceeded: 'Could not upload more than {{maxCount}} files.',
+      },
     },
     validation: {
       title: 'Validation Error',
@@ -453,7 +606,18 @@ How would you categorize this email?`,
       chunkOverlapLessThanChunkSize: {
         message: 'Chunk overlap must be set to less than Chunk size',
       },
-
+      quickStarter: {
+        message: 'Please input both Title and Conversation Example.',
+      },
+    },
+    helper: {
+      shortcuts: {
+        title: 'Shortcut Keys',
+        items: {
+          focusInput: 'Shift focus to chat input',
+          newChat: 'Open new chat',
+        },
+      },
     },
   },
 };

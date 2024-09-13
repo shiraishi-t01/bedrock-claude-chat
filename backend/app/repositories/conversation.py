@@ -48,6 +48,7 @@ def store_conversation(
         # Ref: https://stackoverflow.com/questions/63026648/errormessage-class-decimal-inexact-class-decimal-rounded-while
         "TotalPrice": decimal(str(conversation.total_price)),
         "LastMessageId": conversation.last_message_id,
+        "ShouldContinue": conversation.should_continue,
     }
 
     if conversation.bot_id:
@@ -189,6 +190,7 @@ def find_conversation_by_id(user_id: str, conversation_id: str) -> ConversationM
                             content_type=c["content_type"],
                             body=c["body"],
                             media_type=c["media_type"],
+                            file_name=c.get("file_name", None),
                         )
                         for c in v["content"]
                     ]
@@ -199,6 +201,7 @@ def find_conversation_by_id(user_id: str, conversation_id: str) -> ConversationM
                             content_type=v["content"]["content_type"],
                             body=v["content"]["body"],
                             media_type=None,
+                            file_name=None,
                         )
                     ]
                 ),
@@ -219,6 +222,9 @@ def find_conversation_by_id(user_id: str, conversation_id: str) -> ConversationM
                     [
                         ChunkModel(
                             content=c["content"],
+                            content_type=(
+                                c["content_type"] if "content_type" in c else "s3"
+                            ),
                             source=c["source"],
                             rank=c["rank"],
                         )
@@ -227,11 +233,13 @@ def find_conversation_by_id(user_id: str, conversation_id: str) -> ConversationM
                     if v.get("used_chunks")
                     else None
                 ),
+                thinking_log=v.get("thinking_log"),
             )
             for k, v in message_map.items()
         },
         last_message_id=item["LastMessageId"],
         bot_id=item["BotId"] if "BotId" in item else None,
+        should_continue=item.get("ShouldContinue", False),
     )
     logger.info(f"Found conversation: {conv}")
     return conv

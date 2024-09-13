@@ -1,26 +1,43 @@
+import json
+import logging
 import os
+import re
 from datetime import datetime
-from typing import List, Literal
+from typing import Any, List, Literal
 
 import boto3
-from anthropic import AnthropicBedrock
-from app.repositories.models.conversation import MessageModel
+import pg8000
+from aws_lambda_powertools.utilities import parameters
 from botocore.client import Config
 from botocore.exceptions import ClientError
+
+logger = logging.getLogger(__name__)
 
 REGION = os.environ.get("REGION", "us-east-1")
 BEDROCK_REGION = os.environ.get("BEDROCK_REGION", "us-east-1")
 PUBLISH_API_CODEBUILD_PROJECT_NAME = os.environ.get(
     "PUBLISH_API_CODEBUILD_PROJECT_NAME", ""
 )
+DB_SECRETS_ARN = os.environ.get("DB_SECRETS_ARN", "")
+
+
+def snake_to_camel(snake_str):
+    components = snake_str.split("_")
+    return components[0] + "".join(x.title() for x in components[1:])
+
+
+def convert_dict_keys_to_camel_case(snake_dict):
+    camel_dict = {}
+    for key, value in snake_dict.items():
+        new_key = snake_to_camel(key)
+        if isinstance(value, dict):
+            value = convert_dict_keys_to_camel_case(value)
+        camel_dict[new_key] = value
+    return camel_dict
 
 
 def is_running_on_lambda():
     return "AWS_EXECUTION_ENV" in os.environ
-
-
-def is_anthropic_model(model_id: str) -> bool:
-    return model_id.startswith("anthropic") or False
 
 
 def get_bedrock_client(region=BEDROCK_REGION):
@@ -28,8 +45,8 @@ def get_bedrock_client(region=BEDROCK_REGION):
     return client
 
 
-def get_anthropic_client(region=BEDROCK_REGION):
-    client = AnthropicBedrock(aws_region=region)
+def get_bedrock_agent_client(region=REGION):
+    client = boto3.client("bedrock-agent-runtime", region)
     return client
 
 
@@ -155,3 +172,49 @@ def start_codebuild_project(environment_variables: dict) -> str:
         environmentVariablesOverride=environment_variables_override,
     )
     return response["build"]["id"]
+
+
+def query_postgres(
+    query: str,
+    params: tuple | None = None,
+    include_columns: bool = False,
+) -> tuple:
+    """Query the PostgreSQL and return the results.
+    Args:
+        query (str): The SQL query to execute.
+        params (tuple, optional): The parameters for the query template. Defaults to None.
+        include_columns (bool, optional): Whether to include the column names in the result. Defaults to False.
+
+    Returns:
+        tuple: The results of the query.
+        example: ((1, 'Alice'), (2, 'Bob')) if include_columns is False
+                 (('id', 'name'), (1, 'Alice'), (2, 'Bob')) if include_columns is True
+    """
+    secrets: Any = parameters.get_secret(DB_SECRETS_ARN)  # type: ignore
+    db_info = json.loads(secrets)
+
+    conn = pg8000.connect(
+        database=db_info["dbname"],
+        host=db_info["host"],
+        port=db_info["port"],
+        user=db_info["username"],
+        password=db_info["password"],
+    )
+
+    args = params if params else ()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(query, args=args)
+            res = cursor.fetchall()
+            columns = tuple([desc[0] for desc in cursor.description])
+    except Exception as e:
+        logger.error(f"Error executing query: {e}")
+        raise e
+    finally:
+        conn.close()
+
+    logger.debug(f"{len(res)} records found.")
+
+    if include_columns:
+        return columns, res
+    return res

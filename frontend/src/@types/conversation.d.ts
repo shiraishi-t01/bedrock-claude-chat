@@ -4,14 +4,50 @@ export type Model =
   | 'claude-v2'
   | 'claude-v3-opus'
   | 'claude-v3-sonnet'
+  | 'claude-v3.5-sonnet'
   | 'claude-v3-haiku'
   | 'mistral-7b-instruct'
   | 'mixtral-8x7b-instruct'
   | 'mistral-large';
 export type Content = {
-  contentType: 'text' | 'image';
+  contentType: 'text' | 'image' | 'attachment';
   mediaType?: string;
+  fileName?: string;
   body: string;
+};
+
+export type UsedChunk = {
+  content: string;
+  contentType: 's3' | 'url' | 'youtube';
+  source: string;
+  rank: number;
+};
+
+export type AgentToolUseContent = {
+  toolUseId: string;
+  name: string;
+  input: { [key: string]: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
+};
+
+export type AgentToolResultContent = {
+  json_: { [key: string]: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
+  text: string;
+};
+
+export type AgentToolResult = {
+  toolUseId: string;
+  content: AgentToolResultContent;
+  status: 'success' | 'error';
+};
+
+export type AgentContent = {
+  contentType: 'toolUse' | 'toolResult' | 'text';
+  body: AgentToolUseContent | AgentToolResult | string;
+};
+
+export type AgentMessage = {
+  role: string;
+  content: AgentContent[];
 };
 
 export type MessageContent = {
@@ -19,11 +55,13 @@ export type MessageContent = {
   content: Content[];
   model: Model;
   feedback: null | Feedback;
+  usedChunks: null | UsedChunk[];
+  thinkingLog: null | AgentMessage[];
 };
 
 export type RelatedDocument = {
   chunkBody: string;
-  contentType: 's3' | 'url';
+  contentType: 's3' | 'url' | 'youtube';
   sourceLink: string;
   rank: number;
 };
@@ -41,6 +79,7 @@ export type PostMessageRequest = {
     parentMessageId: null | string;
   };
   botId?: string;
+  continueGenerate?: bool;
 };
 
 export type PostMessageResponse = {
@@ -57,7 +96,7 @@ export type GetRelatedDocumentsRequest = {
   botId: string;
 };
 
-export type GetRelatedDocumentsResponse = RelatedDocument[];
+export type GetRelatedDocumentsResponse = RelatedDocument[] | null;
 
 export type ConversationMeta = {
   id: string;
@@ -77,6 +116,7 @@ export type MessageMap = {
 
 export type Conversation = ConversationMeta & {
   messageMap: MessageMap;
+  shouldContinue: boolean;
 };
 
 export type PutFeedbackRequest = {

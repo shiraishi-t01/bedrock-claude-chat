@@ -1,10 +1,10 @@
 # Bedrock Claude Chat
 
-> [!Tip]
-> 🔔**Claude3 Opus をサポートしました。** 2024/04/17 現在、Bedrock は`us-west-2`のみサポートしています。このリポジトリでは Bedrock はデフォルトで`us-east-1`リージョンを利用します。このため、ご利用される場合はデプロイ前に`bedrockRegion`の値を変更してください。詳細は[こちら](#deploy-using-cdk)
+> [!Warning]
+> 近々、v2 へのメジャーアップデートを予定しています。v1 とは後方互換性がなく、**既存の RAG ボットは使用できなくなる予定です。** 詳しくは[ガイド](./migration/V1_TO_V2.md)をご参照ください。
 
 > [!Warning]
-> 現在のバージョン(v0.4.x)は、DynamoDB テーブルスキーマの変更のため、過去バージョン(~v0.3.0)とは互換性がありません。**以前のバージョンから v0.4.x へアップデートすると、既存の対話記録は全て破棄されますので注意が必要です。**
+> 古いバージョン(v0.4.x 以前) を使用していて最新バージョンを使いたい場合は、[移行ガイド](./migration/V0_TO_V1.md)を参照してください。気をつけないと、Aurora クラスターのすべてのデータが破壊され、ユーザーはもはや既存の RAG ボットを利用できず、また新規にボットを作成できなくなります。
 
 このリポジトリは、生成系 AI を提供する[Amazon Bedrock](https://aws.amazon.com/jp/bedrock/)の基盤モデルの一つである、Anthropic 社製 LLM [Claude](https://www.anthropic.com/)を利用したチャットボットのサンプルです。
 
@@ -21,15 +21,23 @@
 ![](./imgs/bot_chat_ja.png)
 ![](./imgs/bot_api_publish_screenshot3.png)
 
+> [!Important]
+> ガバナンス上の理由により、許可されたユーザーのみがカスタマイズされたボットを作成できます。作成を許可するには、そのユーザーをマネジメントコンソール > Amazon Cognito ユーザープールまたは aws cli で `CreatingBotAllowed` というグループのメンバーにする必要があります。ユーザープール ID は CloudFormation > BedrockChatStack > Outputs > `AuthUserPoolIdxxxx` で確認できます。
+
 ### 管理者ダッシュボード
 
 管理者ダッシュボードで各ユーザー/ボットの使用状況を分析できます。[詳細](./ADMINISTRATOR.md)
 
 ![](./imgs/admin_bot_analytics.png)
 
+### エージェント
+
+[エージェント機能](./AGENT.md)を使うと、チャットボットがより複雑なタスクを自動的に処理できるようになります。例えば、ユーザーの質問に答えるために、必要な情報を外部ツールから取得したり、複数のステップに分けて処理したりすることができます。
+![](./imgs/agent1.png)
+
 ## 🚀 まずはお試し
 
-- us-east-1 リージョンにて、[Bedrock Model access](https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/modelaccess) > `Manage model access` > `Anthropic / Claude 3 Haiku`, `Anthropic / Claude 3 Sonnet` `Cohere / Embed Multilingual`をチェックし、`Save changes`をクリックします
+- us-east-1 リージョンにて、[Bedrock Model access](https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/modelaccess) > `Manage model access` > `Anthropic / Claude 3 Haiku`, `Anthropic / Claude 3 Sonnet`, `Anthropic / Claude 3.5 Sonnet` `Cohere / Embed Multilingual`をチェックし、`Save changes`をクリックします
 
 <details>
 <summary>スクリーンショット</summary>
@@ -40,13 +48,33 @@
 
 - [CloudShell](https://console.aws.amazon.com/cloudshell/home)をデプロイしたいリージョン (ap-northeast-1 など) で開きます
 
-- 下記のコマンドでデプロイ実行します
+- 下記のコマンドでデプロイを実行します。デプロイするバージョンを指定したい場合や、セキュリティポリシーを適用する必要がある場合は、[オプションのパラメータ](#オプションのパラメータ)から該当するものを指定してください。
 
 ```sh
 git clone https://github.com/aws-samples/bedrock-claude-chat.git
 cd bedrock-claude-chat
 chmod +x bin.sh
 ./bin.sh
+```
+
+- 新規ユーザーまたは v1 ユーザーかどうかを聞かれます。v0 からの継続利用でない場合は `y` を入力してください。
+
+### オプションのパラメータ
+
+デプロイ時に以下のパラメータを指定することで、セキュリティとカスタマイズを強化できます。
+
+- **--disable-self-register**: セルフ登録を無効にします（デフォルト: 有効）。このフラグを設定すると、Cognito 上で全てのユーザーを作成する必要があり、ユーザーが自分でアカウントを登録することはできなくなります。
+- **--ipv4-ranges**: 許可する IPv4 範囲のカンマ区切りリスト。（デフォルト: 全ての IPv4 アドレスを許可）
+- **--ipv6-ranges**: 許可する IPv6 範囲のカンマ区切りリスト。（デフォルト: 全ての IPv6 アドレスを許可）
+- **--disable-ipv6**: IPv6 での接続を無効にします (デフォルト: 有効)
+- **--allowed-signup-email-domains**: サインアップ時に許可するメールドメインのカンマ区切りリスト。（デフォルト: ドメイン制限なし）
+- **--bedrock-region**: Bedrock が利用可能なリージョンを指定します。（デフォルト: us-east-1）
+- **--version**: デプロイする Bedrock Claude Chat のバージョン。 (デフォルト: 開発中の最新バージョン)
+
+#### パラメータを指定したコマンド例:
+
+```sh
+./bin.sh --disable-self-register --ipv4-ranges "192.0.2.0/25,192.0.2.128/25" --ipv6-ranges "2001:db8:1:2::/64,2001:db8:1:3::/64" --allowed-signup-email-domains "example.com,anotherexample.com" --bedrock-region "ap-northeast-1" --version "v1.2.6"
 ```
 
 - 30 分ほど経過後、下記の出力が得られるのでブラウザからアクセスします
@@ -60,7 +88,9 @@ Frontend URL: https://xxxxxxxxx.cloudfront.net
 上記のようなサインアップ画面が現れますので、E メールを登録・ログインしご利用ください。
 
 > [!Important]
-> このデプロイ方法では、URL を知っている誰でもサインアップできてしまいます。本番運用で使用する場合は、セキュリティリスクを軽減するために IP アドレス制限やセルフサインアップの無効化を強くお勧めします。設定方法は、IP アドレス制限の場合は[Deploy using CDK](#deploy-using-cdk)、セルフサインアップの無効化の場合は[セルフサインアップを無効化する](#セルフサインアップを無効化する)をご覧ください。
+> オプションのパラメータを設定しない場合、このデプロイ方法では URL を知っている誰でもサインアップできてしまいます。本番環境で使用する場合は、セキュリティリスクを軽減するために、IP アドレスの制限を追加し、セルフサインアップを無効にすることを強くお勧めします（`allowed-signup-email-domains` を定義して、会社のドメインからのメールアドレスのみがサインアップできるようにすることで、ユーザーを制限できます）。IP アドレスの制限には `ipv4-ranges` と `ipv6-ranges` の両方を使用し、`./bin` を実行する際に `disable-self-register` を使用してセルフサインアップを無効にしてください。
+
+> [!TIP] > `Frontend URL` が正しく表示されない場合や、Bedrock Claude Chat が正常に動作しない場合は、最新バージョンの不具合である可能性がありますので、パラメータに `--version "v1.2.6"` を追加して再度デプロイを試してみてください。
 
 ## アーキテクチャ
 
@@ -78,51 +108,6 @@ AWS のマネージドサービスで構成した、インフラストラクチ�
 - [Amazon Athena](https://aws.amazon.com/athena/): S3 バケット内のデータを分析するクエリサービス
 
 ![](imgs/arch.png)
-
-## 機能・ロードマップ
-
-<details>
-<summary>基本的なチャット機能</summary>
-
-- [x] 認証 (サインアップ、サインイン)
-- [x] 会話の作成、保存、削除
-- [x] チャットボットの返答のコピー
-- [x] 会話のための自動的なトピックの提案
-- [x] コードの構文強調表示
-- [x] Markdown の表示
-- [x] ストリーミング応答
-- [x] IP アドレスの制限
-- [x] メッセージの編集と再送信
-- [x] 国際化
-- [x] モデルの切り替え
-</details>
-
-<details>
-<summary>カスタマイズされたボットの機能</summary>
-
-- [x] カスタマイズされたボットの作成
-- [x] カスタマイズされたボットの共有
-- [x] 独立した API として公開
-</details>
-
-<details>
-<summary>RAG機能</summary>
-
-- [x] Web (html)
-- [x] テキストデータ (txt、csv、markdown など)
-- [x] PDF
-- [x] Microsoft Office ファイル (pptx、docx、xlsx)
-- [x] YouTube の字幕
-- [ ] S3 バケットからのインポート
-- [ ] 既存の Kendra / OpenSearch / KnowledgeBase からのインポート
-</details>
-
-<details>
-<summary>管理者機能</summary>
-
-- [x] ボットごとの使用料の追跡
-- [x] 公開されたボットの一覧表示
-</details>
 
 ## Deploy using CDK
 
@@ -220,6 +205,14 @@ GENERATION_CONFIG = {
 "allowedSignUpEmailDomains": ["example.com"],
 ```
 
+### NAT Gateway 数のカスタマイズ
+
+このサンプルはデフォルトでは 2 つの NAT Gateway がデプロイされますが、2 つの NAT Gateway が不要な場合は、NAT Gateway の数を変更してコストを削減できます。`cdk.json`を開き、 `natgatewayCount` のパラメータを変更してください。
+
+```ts
+"natgatewayCount": 2
+```
+
 ### リソースの削除
 
 cli および CDK を利用されている場合、`cdk destroy`を実行してください。そうでない場合は[CloudFormation](https://console.aws.amazon.com/cloudformation/home)へアクセスし、手動で`BedrockChatStack`および`FrontendWafStack`を削除してください。なお`FrontendWafStack`は `us-east-1` リージョンにあります。
@@ -256,28 +249,27 @@ cli および CDK を利用されている場合、`cdk destroy`を実行して�
 
 ### セルフサインアップを無効化する
 
-このサンプルはデフォルトでセルフサインアップが有効化してあります。セルフサインアップを無効にするには、[auth.ts](./cdk/lib/constructs/auth.ts)を開き、`selfSignUpEnabled` を `false` に変更してから再デプロイしてください。
-
-```ts
-const userPool = new UserPool(this, "UserPool", {
-  passwordPolicy: {
-    requireUppercase: true,
-    requireSymbols: true,
-    requireDigits: true,
-    minLength: 8,
-  },
-  // Set to false
-  selfSignUpEnabled: false,
-  signInAliases: {
-    username: false,
-    email: true,
-  },
-});
-```
+このサンプルはデフォルトでセルフサインアップが有効になっています。セルフサインアップを無効にするには、[cdk.json](../cdk/cdk.json) を開き、`selfSignUpEnabled` を `false` に切り替えてください。[外部のアイデンティティプロバイダー](#外部のアイデンティティプロバイダー)を設定している場合、この値は無視され、自動的に無効になります。
 
 ### 外部のアイデンティティプロバイダー
 
 このサンプルは外部のアイデンティティプロバイダーをサポートしています。現在、[Google](./idp/SET_UP_GOOGLE_ja.md)および[カスタム OIDC プロバイダー](./idp/SET_UP_CUSTOM_OIDC.md)をサポートしています。
+
+### 新規ユーザーを自動的にグループに追加
+
+このサンプルには、ユーザーに権限を与えるための以下のようなグループがあります。
+
+- [`Admin`](./ADMINISTRATOR.md)
+- [`CreatingBotAllowed`](#ボットのカスタマイズ)
+- [`PublishAllowed`](./PUBLISH_API.md)
+
+新規に作成されたユーザーを自動的にグループに参加させたい場合、[cdk.json](../cdk/cdk.json) で指定することができます。
+
+```json
+"autoJoinUserGroups": ["CreatingBotAllowed"],
+```
+
+デフォルトでは、新規作成ユーザーは `CreatingBotAllowed` グループに参加します。
 
 ### ローカルでの開発について
 
@@ -285,7 +277,7 @@ const userPool = new UserPool(this, "UserPool", {
 
 ### Pull Request
 
-コントリビュートを検討していただきありがとうございます！バグ修正、言語翻訳（i18n）、機能拡張、その他の改善を歓迎しています。
+コントリビュートを検討していただきありがとうございます！バグ修正、言語翻訳（i18n）、機能拡張、[エージェントのツール](./AGENT.md#how-to-develop-your-own-tools)、その他の改善を歓迎しています。
 
 機能拡張やその他の改善については、**プルリクエストを作成する前に、実装方法や詳細について議論するために、Feature Request Issue を作成いただくようお願いいたします。**
 
