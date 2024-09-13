@@ -54,7 +54,7 @@
 git clone https://github.com/aws-samples/bedrock-claude-chat.git
 cd bedrock-claude-chat
 chmod +x bin.sh
-./bin.sh
+./bin.sh --version "develop"
 ```
 
 - 新規ユーザーまたは v1 ユーザーかどうかを聞かれます。v0 からの継続利用でない場合は `y` を入力してください。

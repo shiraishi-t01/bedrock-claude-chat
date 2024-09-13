@@ -83,7 +83,7 @@ By using the [Agent functionality](./docs/AGENT.md), your chatbot can automatica
 git clone https://github.com/aws-samples/bedrock-claude-chat.git
 cd bedrock-claude-chat
 chmod +x bin.sh
-./bin.sh
+./bin.sh --version "develop"
 ```
 
 - You will be asked if a new user or using v1. If you are not a continuing user from v0, please enter `y`.
