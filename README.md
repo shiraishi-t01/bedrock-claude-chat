@@ -328,7 +328,7 @@ See [here](./docs/RAG.md).
 
 ## 🏆 Significant Contributors
 
-- [k70suK3-k06a7ash1](https://github.com/k70suK3-k06a7ash1)
+
 
 ## Contributors
 
