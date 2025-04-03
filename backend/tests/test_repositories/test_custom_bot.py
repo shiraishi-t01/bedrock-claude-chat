@@ -31,6 +31,7 @@ from app.repositories.models.custom_bot import (
     KnowledgeModel,
     SearchParamsModel,
 )
+from app.repositories.models.custom_bot_guardrails import BedrockGuardrailsModel
 from app.repositories.models.custom_bot_kb import (
     AnalyzerParamsModel,
     BedrockKnowledgeBaseModel,
@@ -60,7 +61,7 @@ class TestCustomBotRepository(unittest.TestCase):
                 ConversationQuickStarterModel(title="QS title", example="QS example")
             ],
             bedrock_knowledge_base=BedrockKnowledgeBaseModel(
-                embeddings_model="titan_v1",
+                embeddings_model="titan_v2",
                 open_search=OpenSearchParamsModel(
                     analyzer=AnalyzerParamsModel(
                         character_filters=["icu_normalizer"],
@@ -75,6 +76,18 @@ class TestCustomBotRepository(unittest.TestCase):
                 chunking_strategy="default",
                 max_tokens=2000,
                 overlap_percentage=0,
+            ),
+            bedrock_guardrails=BedrockGuardrailsModel(
+                is_guardrail_enabled=True,
+                hate_threshold=0,
+                insults_threshold=0,
+                sexual_threshold=0,
+                violence_threshold=0,
+                misconduct_threshold=0,
+                grounding_threshold=0.0,
+                relevance_threshold=0.0,
+                guardrail_arn="arn:aws:guardrail",
+                guardrail_version="v1",
             ),
         )
         store_bot("user1", bot)
@@ -117,7 +130,7 @@ class TestCustomBotRepository(unittest.TestCase):
         self.assertEqual(len(bot.conversation_quick_starters), 1)
         self.assertEqual(bot.conversation_quick_starters[0].title, "QS title")
         self.assertEqual(bot.conversation_quick_starters[0].example, "QS example")
-        self.assertEqual(bot.bedrock_knowledge_base.embeddings_model, "titan_v1")
+        self.assertEqual(bot.bedrock_knowledge_base.embeddings_model, "titan_v2")
         self.assertEqual(bot.bedrock_knowledge_base.chunking_strategy, "default")
         self.assertEqual(bot.bedrock_knowledge_base.max_tokens, 2000)
         self.assertEqual(bot.bedrock_knowledge_base.overlap_percentage, 0)
@@ -135,6 +148,16 @@ class TestCustomBotRepository(unittest.TestCase):
         )
         self.assertEqual(bot.bedrock_knowledge_base.search_params.max_results, 20)
         self.assertEqual(bot.bedrock_knowledge_base.search_params.search_type, "hybrid")
+        self.assertEqual(bot.bedrock_guardrails.is_guardrail_enabled, True)
+        self.assertEqual(bot.bedrock_guardrails.hate_threshold, 0)
+        self.assertEqual(bot.bedrock_guardrails.insults_threshold, 0)
+        self.assertEqual(bot.bedrock_guardrails.sexual_threshold, 0)
+        self.assertEqual(bot.bedrock_guardrails.violence_threshold, 0)
+        self.assertEqual(bot.bedrock_guardrails.misconduct_threshold, 0)
+        self.assertEqual(bot.bedrock_guardrails.grounding_threshold, 0.0)
+        self.assertEqual(bot.bedrock_guardrails.relevance_threshold, 0.0)
+        self.assertEqual(bot.bedrock_guardrails.guardrail_arn, "arn:aws:guardrail")
+        self.assertEqual(bot.bedrock_guardrails.guardrail_version, "v1")
 
         # Assert bot is stored in user1's bot list
         bot = find_private_bots_by_user_id("user1")
@@ -190,7 +213,7 @@ class TestCustomBotRepository(unittest.TestCase):
             False,
             "user1",
             bedrock_knowledge_base=BedrockKnowledgeBaseModel(
-                embeddings_model="titan_v1",
+                embeddings_model="titan_v2",
                 open_search=OpenSearchParamsModel(
                     analyzer=AnalyzerParamsModel(
                         character_filters=["icu_normalizer"],
@@ -256,7 +279,7 @@ class TestCustomBotRepository(unittest.TestCase):
                 ConversationQuickStarterModel(title="QS title", example="QS example")
             ],
             bedrock_knowledge_base=BedrockKnowledgeBaseModel(
-                embeddings_model="titan_v1",
+                embeddings_model="titan_v2",
                 open_search=OpenSearchParamsModel(
                     analyzer=AnalyzerParamsModel(
                         character_filters=["icu_normalizer"],
@@ -271,6 +294,18 @@ class TestCustomBotRepository(unittest.TestCase):
                 chunking_strategy="default",
                 max_tokens=2000,
                 overlap_percentage=0,
+            ),
+            bedrock_guardrails=BedrockGuardrailsModel(
+                is_guardrail_enabled=True,
+                hate_threshold=1,
+                insults_threshold=2,
+                sexual_threshold=3,
+                violence_threshold=4,
+                misconduct_threshold=5,
+                grounding_threshold=0.1,
+                relevance_threshold=0.2,
+                guardrail_arn="arn:aws:guardrail",
+                guardrail_version="v1",
             ),
         )
 
@@ -301,7 +336,7 @@ class TestCustomBotRepository(unittest.TestCase):
         self.assertEqual(bot.conversation_quick_starters[0].title, "QS title")
         self.assertEqual(bot.conversation_quick_starters[0].example, "QS example")
 
-        self.assertEqual(bot.bedrock_knowledge_base.embeddings_model, "titan_v1")
+        self.assertEqual(bot.bedrock_knowledge_base.embeddings_model, "titan_v2")
         self.assertEqual(bot.bedrock_knowledge_base.chunking_strategy, "default")
         self.assertEqual(bot.bedrock_knowledge_base.max_tokens, 2000)
         self.assertEqual(bot.bedrock_knowledge_base.overlap_percentage, 0)
@@ -317,6 +352,18 @@ class TestCustomBotRepository(unittest.TestCase):
             bot.bedrock_knowledge_base.open_search.analyzer.token_filters,
             ["kuromoji_baseform"],
         )
+        self.assertEqual(bot.bedrock_knowledge_base.search_params.max_results, 20)
+        self.assertEqual(bot.bedrock_knowledge_base.search_params.search_type, "hybrid")
+        self.assertEqual(bot.bedrock_guardrails.is_guardrail_enabled, True)
+        self.assertEqual(bot.bedrock_guardrails.hate_threshold, 1)
+        self.assertEqual(bot.bedrock_guardrails.insults_threshold, 2)
+        self.assertEqual(bot.bedrock_guardrails.sexual_threshold, 3)
+        self.assertEqual(bot.bedrock_guardrails.violence_threshold, 4)
+        self.assertEqual(bot.bedrock_guardrails.misconduct_threshold, 5)
+        self.assertEqual(bot.bedrock_guardrails.grounding_threshold, 0.1)
+        self.assertEqual(bot.bedrock_guardrails.relevance_threshold, 0.2)
+        self.assertEqual(bot.bedrock_guardrails.guardrail_arn, "arn:aws:guardrail")
+        self.assertEqual(bot.bedrock_guardrails.guardrail_version, "v1")
 
         delete_bot_by_id("user1", "1")
 
