@@ -40,7 +40,7 @@ export class ApiPublishCodebuild extends Construct {
         phases: {
           install: {
             "runtime-versions": {
-              nodejs: "18",
+              nodejs: "22",
             },
             commands: ["npm install -g aws-cdk"],
             "on-failure": "ABORT",
